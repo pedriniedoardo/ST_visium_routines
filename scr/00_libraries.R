@@ -1,0 +1,6 @@
+renv::install("tidyverse")
+renv::install("Seurat")
+renv::install("satijalab/seurat-data")
+renv::install("patchwork")
+renv::install("hdf5r")
+renv::install("bioc::GEOquery")
