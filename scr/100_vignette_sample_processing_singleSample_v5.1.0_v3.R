@@ -35,6 +35,11 @@ brain2 <- readRDS("../../data/misc/stxBrain.SeuratData_0.1.1_posterior1.rds")
 # brain2 <- readRDS("../../data/misc/stxBrain.SeuratData_0.1.2_posterior1.rds")
 allen_reference <- readRDS("../../data/misc/allen_cortex.rds")
 
+# define the scale factor for the points. this is needed for older objects assay v3 running on Seurat 5.1.0
+# ref: https://github.com/satijalab/seurat/issues/9049
+spot_size <- brain@images$anterior1@scale.factors$fiducial/brain@images$anterior1@scale.factors$hires
+SpatialFeaturePlot(brain, features = "nCount_Spatial",pt.size.factor = spot_size) + theme(legend.position = "right")
+
 # check the scale factor of the images if using v3 with Seurat 5.1.0
 # image <- brain[["anterior1"]]
 # scale_factors <- ScaleFactors(image)
@@ -44,7 +49,7 @@ allen_reference <- readRDS("../../data/misc/allen_cortex.rds")
 
 # if needed fix the scale factor
 # if hires_scale_factor and spot_radius are equal - this should not be the case. Fortunately, there's an easy workaround:
-brain@images$anterior1@scale.factors$spot <- 89.4725
+# brain@images$anterior1@scale.factors$spot <- 89.4725
 
 class(brain@assays$Spatial)
 class(brain@assays$SCT)
@@ -53,7 +58,7 @@ class(allen_reference@assays$RNA)
 # Data preprocessing ------------------------------------------------------
 # The initial preprocessing steps that we perform on the spot by gene expression data are similar to a typical scRNA-seq experiment. We first need to normalize the data in order to account for variance in sequencing depth across data points. We note that the variance in molecular counts / spot can be substantial for spatial datasets, particularly if there are differences in cell density across the tissue. We see substantial heterogeneity here, which requires effective normalization.
 plot1 <- VlnPlot(brain, features = "nCount_Spatial", pt.size = 0.1) + NoLegend()
-plot2 <- SpatialFeaturePlot(brain, features = "nCount_Spatial") + theme(legend.position = "right")
+plot2 <- SpatialFeaturePlot(brain, features = "nCount_Spatial",pt.size.factor = spot_size) + theme(legend.position = "right")
 wrap_plots(plot1, plot2)
 
 # These plots demonstrate that the variance in molecular counts across spots is not just technical in nature, but also is dependent on the tissue anatomy. For example, regions of the tissue that are depleted for neurons (such as the cortical white matter), reproducibly exhibit lower molecular counts. As a result, standard approaches (such as the LogNormalize() function), which force each data point to have the same underlying ‘size’ after normalization, can be problematic.
@@ -71,15 +76,15 @@ brain <- brain %>%
 
 # We can then visualize the results of the clustering either in UMAP space (with DimPlot()) or overlaid on the image with SpatialDimPlot().
 p1 <- DimPlot(brain, reduction = "umap", label = TRUE)
-p2 <- SpatialDimPlot(brain, label = TRUE, label.size = 3)
+p2 <- SpatialDimPlot(brain, label = TRUE, label.size = 3,pt.size.factor = spot_size)
 p1 + p2
 
-SpatialDimPlot(brain, cells.highlight = CellsByIdentities(object = brain, idents = c(2, 1, 4, 3,5, 8)), facet.highlight = TRUE, ncol = 3)
+SpatialDimPlot(brain, cells.highlight = CellsByIdentities(object = brain, idents = c(2, 1, 4, 3,5, 8)), facet.highlight = TRUE, ncol = 3,pt.size.factor = spot_size)
 
 # Identification of Spatially Variable Features ---------------------------
 # Seurat offers two workflows to identify molecular features that correlate with spatial location within a tissue. The first is to perform differential expression based on pre-annotated anatomical regions within the tissue, which may be determined either from unsupervised clustering or prior knowledge. This strategy works will in this case, as the clusters above exhibit clear spatial restriction.
 de_markers <- FindMarkers(brain, ident.1 = 5, ident.2 = 6)
-SpatialFeaturePlot(object = brain, features = rownames(de_markers)[1:3], alpha = c(0.1, 1), ncol = 3)
+SpatialFeaturePlot(object = brain, features = rownames(de_markers)[1:3], alpha = c(0.1, 1), ncol = 3,pt.size.factor = spot_size)
 
 # An alternative approach, implemented in FindSpatiallyVariables(), is to search for features exhibiting spatial patterning in the absence of pre-annotation. The default method (method = 'markvariogram), is inspired by the Trendsceek, which models spatial transcriptomics data as a mark point process and computes a ‘variogram’, which identifies genes whose expression level is dependent on their spatial location. More specifically, this process calculates gamma(r) values measuring the dependence between two spots a certain “r” distance apart. By default, we use an r-value of ‘5’ in these analyses, and only compute these values for variable genes (where variation is calculated independently of spatial location) to save time.
 
@@ -92,7 +97,7 @@ brain <- FindSpatiallyVariableFeatures(brain,
 # this trigger an error
 SpatiallyVariableFeatures(brain, method = "moransi")
 
-# NA introduced in the meta table for the missing morinsi parameters on the missing features
+# NA introduced in the meta table for the missing morinsi parameters on the missing features. on previous version of seurat it was a warning. on Seurat v5.1.0 it fails
 brain@assays$SCT@meta.features %>%
   filter(!is.na(moransi.spatially.variable)) %>% dim()
 
@@ -127,7 +132,7 @@ top.features <- brain@assays$SCT@meta.features %>%
 
 # Now we visualize the expression of the top 6 features identified by this measure.
 # top.features <- head(SpatiallyVariableFeatures(brain, method = "moransi"), 6)
-SpatialFeaturePlot(brain, features = top.features, ncol = 3, alpha = c(0.1, 1))
+SpatialFeaturePlot(brain, features = top.features, ncol = 3, alpha = c(0.1, 1),pt.size.factor = spot_size)
 
 # Subset out anatomical regions -------------------------------------------
 # As with single-cell objects, you can subset the object to focus on a subset of data. Here, we approximately subset the frontal cortex. This process also facilitates the integration of these data with a cortical scRNA-seq dataset in the next section. First, we take a subset of clusters, and then further segment based on exact positions. After subsetting, we can visualize the cortical cells either on the full image, or a cropped image.
@@ -142,8 +147,8 @@ GetTissueCoordinates(cortex)
 cortex <- subset(cortex, anterior1_imagerow > 400 | anterior1_imagecol < 150, invert = TRUE)
 cortex <- subset(cortex, anterior1_imagerow > 275 & anterior1_imagecol > 370, invert = TRUE)
 cortex <- subset(cortex, anterior1_imagerow > 250 & anterior1_imagecol > 440, invert = TRUE)
-p1 <- SpatialDimPlot(cortex, crop = TRUE, label = TRUE)
-p2 <- SpatialDimPlot(cortex, crop = FALSE, label = TRUE, pt.size.factor = 1, label.size = 3)
+p1 <- SpatialDimPlot(cortex, crop = TRUE, label = TRUE, pt.size.factor = spot_size)
+p2 <- SpatialDimPlot(cortex, crop = FALSE, label = TRUE, label.size = 3,pt.size.factor = spot_size)
 p1 + p2
 
 # Integration with single-cell data ---------------------------------------
@@ -158,7 +163,7 @@ p1 + p2
 library(dplyr)
 # plan("multisession", workers = 4)
 # increase the RAM usage
-options(future.globals.maxSize = 10 * 1000 * 1024^2)
+options(future.globals.maxSize = 15 * 1000 * 1024^2)
 allen_reference <- SCTransform(allen_reference, ncells = 3000, verbose = T) %>%
   RunPCA(verbose = FALSE) %>%
   RunUMAP(dims = 1:30)
@@ -178,24 +183,25 @@ cortex[["predictions"]] <- predictions.assay
 # Now we get prediction scores for each spot for each class. Of particular interest in the frontal cortex region are the laminar excitatory neurons. Here we can distinguish between distinct sequential layers of these neuronal subtypes, for example:
 
 DefaultAssay(cortex) <- "predictions"
-SpatialFeaturePlot(cortex, features = c("L2/3 IT", "L4"), pt.size.factor = 1.6, ncol = 2, crop = TRUE)
+SpatialFeaturePlot(cortex, features = c("L2/3 IT", "L4"), ncol = 2, crop = TRUE,pt.size.factor = spot_size)
 
 # Based on these prediction scores, we can also predict cell types whose location is spatially restricted. We use the same methods based on marked point processes to define spatially variable features, but use the cell type prediction scores as the “marks” rather than gene expression.
 cortex <- FindSpatiallyVariableFeatures(cortex, assay = "predictions", selection.method = "moransi",
                                         features = rownames(cortex), r.metric = 5, slot = "data")
 
-top.clusters <- head(SpatiallyVariableFeatures(cortex, selection.method = "moransi"), 4)
+# as before this will fail on Seurat v5.1.0
+# top.clusters <- head(SpatiallyVariableFeatures(cortex, selection.method = "moransi"), 4)
 
 top.clusters <- cortex@assays$predictions@meta.features %>%
   filter(! is.na(moransi.spatially.variable.rank)) %>%
   top_n(4, desc(moransi.spatially.variable.rank)) %>%
   rownames()
 
-SpatialPlot(object = cortex, features = top.clusters, ncol = 2)
+SpatialPlot(object = cortex, features = top.clusters, ncol = 2,pt.size.factor = spot_size)
 
 # Finally, we show that our integrative procedure is capable of recovering the known spatial localization patterns of both neuronal and non-neuronal subsets, including laminar excitatory, layer-1 astrocytes, and the cortical grey matter.
 SpatialFeaturePlot(cortex, features = c("Astro", "L2/3 IT", "L4", "L5 PT", "L5 IT", "L6 CT", "L6 IT",
-                                        "L6b", "Oligo"), pt.size.factor = 1, ncol = 2, crop = FALSE, alpha = c(0.1, 1))
+                                        "L6b", "Oligo"), ncol = 2, crop = FALSE, alpha = c(0.1, 1),pt.size.factor = spot_size)
 
 # show the distribution of the score per annotation
 meta_cortex <- cortex@meta.data %>%
@@ -235,7 +241,7 @@ cortex@meta.data <- meta_cortex_full
 
 # plot the new annotation
 Idents(cortex) <- "top_cellID"
-SpatialDimPlot(cortex, crop = TRUE, label = TRUE)
+SpatialDimPlot(cortex, crop = TRUE, label = TRUE,pt.size.factor = spot_size)
 
 # Working with multiple slices in Seurat ----------------------------------
 # This dataset of the mouse brain contains another slice corresponding to the other half of the brain. Here we read it in and perform the same initial normalization.
@@ -243,9 +249,10 @@ SpatialDimPlot(cortex, crop = TRUE, label = TRUE)
 # brain2 <- LoadData("stxBrain", type = "posterior1")
 brain2 <- SCTransform(brain2, assay = "Spatial", verbose = FALSE)
 # fix the scale factor
-brain2@images$posterior1@scale.factors$spot <- 89.4725
+# brain2@images$posterior1@scale.factors$spot <- 89.4725
+spot_size2 <- brain2@images$posterior1@scale.factors$fiducial/brain2@images$posterior1@scale.factors$hires
 
-SpatialDimPlot(brain2, label = TRUE)
+SpatialDimPlot(brain2, label = TRUE,pt.size.factor = spot_size2)
 
 # In order to work with multiple slices in the same Seurat object, we provide the merge function.
 brain.merge <- merge(brain, brain2)
@@ -265,7 +272,7 @@ DimPlot(brain.merge, reduction = "umap", group.by = c("ident", "orig.ident"))
 
 SpatialDimPlot(brain.merge)
 
-SpatialFeaturePlot(brain.merge, features = c("Hpca", "Plp1"))
+SpatialFeaturePlot(brain.merge, features = c("Hpca", "Plp1"),pt.size.factor = spot_size2)
 
 # save the final objects --------------------------------------------------
 saveRDS(brain,"../../out/object/Visium_mouse_brain_full_v3.rds")
